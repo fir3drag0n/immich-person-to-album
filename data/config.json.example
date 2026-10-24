@@ -1,6 +1,7 @@
 {
   "immichServer": "http://192.168.0.20:2283",
   "schedule": "*/30 * * * *",
+  "fullSyncSchedule": "0 3 * * *",
   "users": [
     {
       "apiKey": "",
@@ -9,6 +10,14 @@
           "description": "Photos of Joe",
           "personId": "Joe's person ID",
           "albumId": "Shared album ID"
+        },
+        {
+          "description": "Family since 2020",
+          "personIds": ["Person ID 1", "Person ID 2"],
+          "match": "any",
+          "albumId": "Family album ID",
+          "takenAfter": "2020-01-01",
+          "removeUntagged": false
         }
       ]
     }

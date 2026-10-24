@@ -1,5 +1,22 @@
 # Immich automatic Person -> Album
 
+> **Fork note (fir3drag0n) – 2.0.0:** maintained fork of
+> [alangrainger/immich-person-to-album](https://github.com/alangrainger/immich-person-to-album), tested with Immich 3.3.5.
+> Existing configs keep working. Changes:
+> - **Faces assigned after the first sync are picked up** ([upstream #11](https://github.com/alangrainger/immich-person-to-album/issues/11)):
+>   besides the quick incremental runs there is a **full sync** on startup and on `fullSyncSchedule` (default daily 03:00)
+>   that compares the album with all assets of the linked people.
+> - No crash when a run finds no new assets (the `items[0]` problem behind #10/#11), and the stored timestamp is the newest
+>   asset of all pages instead of the first item of the first page.
+> - **Several people per link** (#6, #7): `personIds` with `match: "any"` (default) or `"all"` (only photos with all of them).
+> - **Date filter** (#8): `takenAfter` / `takenBefore`.
+> - **Remove untagged photos** (#5): optional `removeUntagged` per link, applied during the full sync.
+> - IDs are validated up front with a clear message per link (likely cause of #9: a person ID with a missing character).
+> - `@immich/sdk` 3.3.5, page size 1000, adds/removes in chunks of 500, no overlapping runs.
+>
+> Build the image yourself: `docker build -t immich-person-to-album:2.0.0 .` (or use the GHCR image built by the workflow
+> on a `v*` tag: `ghcr.io/fir3drag0n/immich-person-to-album`).
+
 Automatically add people (faces) to an album and keep that album up-to-date. You can then share that automatic person-album 
 with another user (for example, a shared album of your children).
 
@@ -65,7 +82,7 @@ Alternatively, you can add the configuration inline in your `docker-compose.yml`
 4. Go to API Keys
 5. Click **New API Key**
 6. Give it a name
-7. Add the permissions of `asset.read` and `albumAsset.create`
+7. Add the permissions `asset.read`, `album.read` and `albumAsset.create` (plus `albumAsset.delete` if you use `removeUntagged`)
 8. Click **Create**
 9. Copy the new API key and put it in your config file 
 
@@ -82,6 +99,33 @@ Album IDs:
 - Immich → Albums → Click album → Copy ID from URL
 - Example URL: http://your-server/albums/ff85e8c5-32e6-49e0-a0ad-e4dd7ef66bce
 - Album ID: ff85e8c5-32e6-49e0-a0ad-e4dd7ef66bce
+
+## All options
+
+```jsonc
+{
+  "immichServer": "http://192.168.0.20:2283",
+  "schedule": "*/30 * * * *",       // quick incremental sync (default: every 30 minutes)
+  "fullSyncSchedule": "0 3 * * *",  // full sync (default: daily 03:00, "" disables it; always runs on startup)
+  "users": [
+    {
+      "apiKey": "XXXXXXXXXX",
+      "personLinks": [
+        // original format: one person
+        { "description": "Joe", "personId": "…", "albumId": "…" },
+        // several people, photos with at least one of them, only since 2020, keep the album clean
+        { "description": "Family", "personIds": ["…", "…"], "match": "any", "albumId": "…",
+          "takenAfter": "2020-01-01", "removeUntagged": true },
+        // only photos showing both
+        { "description": "Joe & Ann", "personIds": ["…", "…"], "match": "all", "albumId": "…" }
+      ]
+    }
+  ]
+}
+```
+
+`removeUntagged` removes every asset from the album that belongs to none of the links pointing at that album,
+**including photos you added by hand**. It only runs during a full sync in which all links of that album succeeded.
 
 ## Troubleshooting
 

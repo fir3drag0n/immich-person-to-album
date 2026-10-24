@@ -1,6 +1,6 @@
 services:
   immich-person-to-album:
-    image: alangrainger/immich-person-to-album:latest
+    image: ghcr.io/fir3drag0n/immich-person-to-album:latest
     container_name: immich-person-to-album
     restart: always
     volumes:

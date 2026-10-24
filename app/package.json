@@ -1,25 +1,25 @@
 {
   "name": "immich-person-to-album",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "scripts": {
     "dev": "ts-node src/index.ts",
     "build": "npx tsc",
     "test": "podman build --build-arg PACKAGE_VERSION=$(npm pkg get version | xargs) --format docker -t immich-person-test .. && podman run --init -it -p=3000:3000 --userns=keep-id -v ../data:/data:Z --restart=always immich-person-test",
     "start": "node dist/index.js"
   },
-  "author": "Alan Grainger",
+  "author": "Alan Grainger, fork by fir3drag0n",
   "license": "AGPL-3.0",
   "description": "Automatically add people to an album, so you can then share the album with another user.",
   "repository": {
     "type": "git",
-    "url": "https://github.com/alangrainger/immich-person-to-album.git"
+    "url": "https://github.com/fir3drag0n/immich-person-to-album.git"
   },
   "main": "dist/index.js",
   "bin": "dist/index.js",
   "dependencies": {
-    "tslib": "^2.8.1",
-    "@immich/sdk": "^1.137.3",
-    "node-cron": "^4.2.1"
+    "@immich/sdk": "^3.3.5",
+    "node-cron": "^4.2.1",
+    "tslib": "^2.8.1"
   },
   "devDependencies": {
     "@types/node": "^16.18.111",

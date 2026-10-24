@@ -1,11 +1,26 @@
 import { PersonToAlbum } from './function'
 import { init } from '@immich/sdk'
 import cron from 'node-cron'
+import { Link } from './types'
 
 const pta = new PersonToAlbum()
+let running = false
 
-async function main () {
-  console.log(new Date().toISOString())
+async function main (full: boolean) {
+  if (running) {
+    console.log('Previous run still in progress, skipping this one.')
+    return
+  }
+  running = true
+  try {
+    await run(full)
+  } finally {
+    running = false
+  }
+}
+
+async function run (full: boolean) {
+  console.log(new Date().toISOString() + (full ? ' (full sync)' : ''))
 
   // Test connection to Immich
   let immichAvailable = false
@@ -28,14 +43,46 @@ async function main () {
     // Init Immich SDK with the specified API key
     init({ baseUrl: pta.config.immichServer + '/api', apiKey: user.apiKey })
 
+    // Per album: the assets that should stay in it, and whether every link worked
+    const albums = new Map<string, { keep: Set<string>, ok: boolean, remove: boolean, description: string }>()
+
     // Process each of the person-album linkages
-    for (const link of user.personLinks) {
+    for (const link of user.personLinks as Link[]) {
       // Populate a truncated API key which will be used in the store.json key name
       link.apiKeyShort = user.apiKey.slice(0, 6)
+      const album = albums.get(link.albumId) || { keep: new Set<string>(), ok: true, remove: false, description: link.description || link.albumId }
+      albums.set(link.albumId, album)
+      album.remove = album.remove || !!link.removeUntagged
+
+      const problem = pta.validateLink(link)
+      if (problem) {
+        console.log(`=== ${link.description || link.albumId} ===`)
+        console.log(` - skipped: ${problem}`)
+        album.ok = false
+        continue
+      }
       try {
-        await pta.processPerson(link)
-      } catch (e) {
-        console.log(e)
+        const ids = await pta.processLink(link, full)
+        ids?.forEach(id => album.keep.add(id))
+      } catch (e: any) {
+        album.ok = false
+        console.log(` - failed: ${e?.status ? `HTTP ${e.status} ` : ''}${e?.data?.message || e?.message || e}`)
+      }
+    }
+
+    // Removing is only safe after a full sync in which every link of the album worked
+    if (full) {
+      for (const [albumId, album] of albums) {
+        if (!album.remove) continue
+        if (!album.ok) {
+          console.log(`Not removing anything from album ${albumId}: at least one of its links failed.`)
+          continue
+        }
+        try {
+          await pta.removeUntagged(albumId, album.keep, album.description)
+        } catch (e: any) {
+          console.log(` - removing from album ${albumId} failed: ${e?.data?.message || e?.message || e}`)
+        }
       }
     }
   }
@@ -57,10 +104,10 @@ process.on('SIGTERM', () => {
   process.exit(0)
 })
 
-// Run on startup
-
-main()
+// Full sync on startup, then incremental runs and a regular full sync on a schedule
+main(true)
   .then(() => {
-    // Then afterwards run on a schedule
-    cron.schedule(pta.config.schedule || '0,30 * * * *', main)
+    cron.schedule(pta.config.schedule || '0,30 * * * *', () => main(false))
+    const fullSchedule = pta.config.fullSyncSchedule ?? '0 3 * * *'
+    if (fullSchedule) cron.schedule(fullSchedule, () => main(true))
   })
