@@ -1,6 +1,6 @@
 # Immich automatic Person -> Album
 
-> **Fork note (fir3drag0n) – 2.1.0:** maintained fork of
+> **Fork note (fir3drag0n) – 2.2.0:** maintained fork of
 > [alangrainger/immich-person-to-album](https://github.com/alangrainger/immich-person-to-album), tested with Immich 3.3.5.
 > Existing configs keep working. Changes:
 > - **Faces assigned after the first sync are picked up** ([upstream #11](https://github.com/alangrainger/immich-person-to-album/issues/11)):
@@ -12,6 +12,7 @@
 > - **Date filter** (#8): `takenAfter` / `takenBefore`.
 > - **Remove untagged photos** (#5): optional `removeUntagged` per link, applied during the full sync.
 >   `"added"` (2.1.0) only removes photos this tool added itself, so photos you put into the album by hand always stay.
+>   Safety brake `maxRemovePercent` (2.2.0, default 10): a full sync never removes more than that share of an album at once.
 > - IDs are validated up front with a clear message per link (likely cause of #9: a person ID with a missing character).
 > - `@immich/sdk` 3.3.5, page size 1000, adds/removes in chunks of 500, no overlapping runs.
 >
@@ -131,6 +132,10 @@ Album IDs:
   fixed in Immich). Photos you added by hand are never touched. The tool remembers what it added in `store.json`
   (`added:<key>:<albumId>`); photos added before 2.1.0 are not in that list.
 - `true`: removes **every** photo that matches none of the album's links, **including photos you added by hand**.
+
+`maxRemovePercent` (default `10`) is a safety brake: if a full sync would remove more than that percentage of the
+album at once (for example after face assignments were reset in bulk), it removes nothing and logs a warning.
+At least one photo can always be removed. If several links point at one album, the lowest value applies.
 
 ## Troubleshooting
 

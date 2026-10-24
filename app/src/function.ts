@@ -57,6 +57,7 @@ export class PersonToAlbum {
     if (bad.length) return `invalid ID(s): ${bad.join(', ')} (expected a UUID like 1b2c3d4e-...)`
     if (link.match && !['any', 'all'].includes(link.match)) return `invalid match "${link.match}" (use "any" or "all")`
     if (link.removeUntagged !== undefined && ![true, false, 'added'].includes(link.removeUntagged as any)) return `invalid removeUntagged "${link.removeUntagged}" (use true, false or "added")`
+    if (link.maxRemovePercent !== undefined && !(typeof link.maxRemovePercent === 'number' && link.maxRemovePercent >= 0 && link.maxRemovePercent <= 100)) return `invalid maxRemovePercent "${link.maxRemovePercent}" (0-100)`
     for (const date of [link.takenAfter, link.takenBefore]) {
       if (date && isNaN(Date.parse(date))) return `invalid date "${date}"`
     }
@@ -190,10 +191,17 @@ export class PersonToAlbum {
    * `mode === 'added'` only touches assets this tool added itself.
    * Only call this when every link of the album was processed successfully.
    */
-  async removeUntagged (apiKeyShort: string, albumId: string, keep: Set<string>, mode: true | 'added', description: string) {
+  async removeUntagged (apiKeyShort: string, albumId: string, keep: Set<string>, mode: true | 'added', maxPercent: number, description: string) {
     const album = await this.fetchAssets({ albumIds: [albumId] })
     const added = this.getAdded(apiKeyShort, albumId)
     const remove = [...album.ids].filter(id => !keep.has(id) && (mode === true || added.has(id)))
+    const limit = Math.max(1, Math.ceil(album.ids.size * maxPercent / 100))
+    if (remove.length > limit) {
+      console.log(`=== ${description} ===`)
+      console.log(` - WARNING: would remove ${remove.length} of ${album.ids.size} asset(s), more than ${maxPercent}% (limit ${limit}).`)
+      console.log('   Nothing removed. If this is intended, raise maxRemovePercent for this album and restart.')
+      return
+    }
     let removed = 0
     if (remove.length) {
       removed = await this.removeFromAlbum(albumId, remove)

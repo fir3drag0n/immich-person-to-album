@@ -3,6 +3,15 @@ import { init } from '@immich/sdk'
 import cron from 'node-cron'
 import { Link } from './types'
 
+/** Per album: the assets that should stay in it, whether every link worked, and the removal settings */
+interface AlbumState {
+  keep: Set<string>
+  ok: boolean
+  remove: false | true | 'added'
+  maxPercent?: number
+  description: string
+}
+
 const pta = new PersonToAlbum()
 let running = false
 
@@ -44,14 +53,16 @@ async function run (full: boolean) {
     init({ baseUrl: pta.config.immichServer + '/api', apiKey: user.apiKey })
 
     // Per album: the assets that should stay in it, and whether every link worked
-    const albums = new Map<string, { keep: Set<string>, ok: boolean, remove: false | true | 'added', description: string }>()
+    const albums = new Map<string, AlbumState>()
 
     // Process each of the person-album linkages
     for (const link of user.personLinks as Link[]) {
       // Populate a truncated API key which will be used in the store.json key name
       link.apiKeyShort = user.apiKey.slice(0, 6)
-      const album = albums.get(link.albumId) || { keep: new Set<string>(), ok: true, remove: false as false | true | 'added', description: link.description || link.albumId }
+      const album = albums.get(link.albumId) || { keep: new Set<string>(), ok: true, remove: false, description: link.description || link.albumId } as AlbumState
       albums.set(link.albumId, album)
+      // The strictest safety brake of all links of an album wins
+      if (typeof link.maxRemovePercent === 'number') album.maxPercent = Math.min(album.maxPercent ?? 100, link.maxRemovePercent)
       // `true` (remove everything) wins over `added` if links of the same album disagree
       if (link.removeUntagged === true) album.remove = true
       else if (link.removeUntagged === 'added' && album.remove !== true) album.remove = 'added'
@@ -81,7 +92,7 @@ async function run (full: boolean) {
           continue
         }
         try {
-          await pta.removeUntagged(user.apiKey.slice(0, 6), albumId, album.keep, album.remove, album.description)
+          await pta.removeUntagged(user.apiKey.slice(0, 6), albumId, album.keep, album.remove, album.maxPercent ?? 10, album.description)
         } catch (e: any) {
           console.log(` - removing from album ${albumId} failed: ${e?.data?.message || e?.message || e}`)
         }

@@ -38,5 +38,12 @@ export interface Link {
    * Off by default.
    */
   removeUntagged?: boolean | 'added';
+  /**
+   * Safety brake for `removeUntagged`: if a full sync would remove more than this
+   * percentage of the album at once, nothing is removed and a warning is logged
+   * (e.g. after a mass reset of face assignments). Default 10. At least one photo
+   * may always be removed. If links of one album disagree, the lowest value wins.
+   */
+  maxRemovePercent?: number;
   apiKeyShort: string;
 }
