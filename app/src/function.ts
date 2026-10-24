@@ -56,6 +56,7 @@ export class PersonToAlbum {
     const bad = [...people, link.albumId].filter(id => !UUID.test(id || ''))
     if (bad.length) return `invalid ID(s): ${bad.join(', ')} (expected a UUID like 1b2c3d4e-...)`
     if (link.match && !['any', 'all'].includes(link.match)) return `invalid match "${link.match}" (use "any" or "all")`
+    if (link.removeUntagged !== undefined && ![true, false, 'added'].includes(link.removeUntagged as any)) return `invalid removeUntagged "${link.removeUntagged}" (use true, false or "added")`
     for (const date of [link.takenAfter, link.takenBefore]) {
       if (date && isNaN(Date.parse(date))) return `invalid date "${date}"`
     }
@@ -107,13 +108,36 @@ export class PersonToAlbum {
     return merged
   }
 
-  async addToAlbum (albumId: string, ids: string[]) {
-    let added = 0
+  /**
+   * Add assets to an album and return the IDs that were actually added
+   * (not the ones that were already in it)
+   */
+  async addToAlbum (albumId: string, ids: string[]): Promise<string[]> {
+    const added: string[] = []
     for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
       const res = await addAssetsToAlbum({ id: albumId, bulkIdsDto: { ids: ids.slice(i, i + CHUNK_SIZE) } })
-      added += res.filter(x => x.success).length
+      res.filter(x => x.success).forEach(x => added.push(x.id))
     }
     return added
+  }
+
+  /**
+   * Store key for the assets this tool added to an album (per API key)
+   */
+  getAddedKeyName (apiKeyShort: string, albumId: string) {
+    return ['added', apiKeyShort, albumId].join(':')
+  }
+
+  getAdded (apiKeyShort: string, albumId: string): Set<string> {
+    const list = store.get(this.getAddedKeyName(apiKeyShort, albumId))
+    return new Set(Array.isArray(list) ? list : [])
+  }
+
+  async rememberAdded (apiKeyShort: string, albumId: string, ids: string[]) {
+    if (!ids.length) return
+    const known = this.getAdded(apiKeyShort, albumId)
+    ids.forEach(id => known.add(id))
+    await store.set(this.getAddedKeyName(apiKeyShort, albumId), [...known])
   }
 
   async removeFromAlbum (albumId: string, ids: string[]) {
@@ -149,8 +173,9 @@ export class PersonToAlbum {
       const album = await this.fetchAssets({ albumIds: [link.albumId] })
       toAdd = toAdd.filter(id => !album.ids.has(id))
     }
-    const added = toAdd.length ? await this.addToAlbum(link.albumId, toAdd) : 0
-    console.log(` - ${assets.ids.size} matching asset(s), ${added} newly added`)
+    const added = toAdd.length ? await this.addToAlbum(link.albumId, toAdd) : []
+    await this.rememberAdded(link.apiKeyShort, link.albumId, added)
+    console.log(` - ${assets.ids.size} matching asset(s), ${added.length} newly added`)
 
     // Only move the timestamp forward, never back, and only if something was found
     const previous = store.get(key)
@@ -162,15 +187,22 @@ export class PersonToAlbum {
 
   /**
    * Remove assets from an album that belong to none of its links.
+   * `mode === 'added'` only touches assets this tool added itself.
    * Only call this when every link of the album was processed successfully.
    */
-  async removeUntagged (albumId: string, keep: Set<string>, description: string) {
+  async removeUntagged (apiKeyShort: string, albumId: string, keep: Set<string>, mode: true | 'added', description: string) {
     const album = await this.fetchAssets({ albumIds: [albumId] })
-    const remove = [...album.ids].filter(id => !keep.has(id))
-    if (!remove.length) return
-    const removed = await this.removeFromAlbum(albumId, remove)
-    console.log(`=== ${description} ===`)
-    console.log(` - removed ${removed} asset(s) that no longer match`)
+    const added = this.getAdded(apiKeyShort, albumId)
+    const remove = [...album.ids].filter(id => !keep.has(id) && (mode === true || added.has(id)))
+    let removed = 0
+    if (remove.length) {
+      removed = await this.removeFromAlbum(albumId, remove)
+      console.log(`=== ${description} ===`)
+      console.log(` - removed ${removed} asset(s) that no longer match${mode === 'added' ? ' (only ones added by this tool)' : ''}`)
+    }
+    // Forget assets that are gone from the album, whether removed here or by hand
+    const stillThere = [...added].filter(id => album.ids.has(id) && !remove.includes(id))
+    if (stillThere.length !== added.size) await store.set(this.getAddedKeyName(apiKeyShort, albumId), stillThere)
   }
 
   /**

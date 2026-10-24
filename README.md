@@ -1,6 +1,6 @@
 # Immich automatic Person -> Album
 
-> **Fork note (fir3drag0n) – 2.0.0:** maintained fork of
+> **Fork note (fir3drag0n) – 2.1.0:** maintained fork of
 > [alangrainger/immich-person-to-album](https://github.com/alangrainger/immich-person-to-album), tested with Immich 3.3.5.
 > Existing configs keep working. Changes:
 > - **Faces assigned after the first sync are picked up** ([upstream #11](https://github.com/alangrainger/immich-person-to-album/issues/11)):
@@ -11,6 +11,7 @@
 > - **Several people per link** (#6, #7): `personIds` with `match: "any"` (default) or `"all"` (only photos with all of them).
 > - **Date filter** (#8): `takenAfter` / `takenBefore`.
 > - **Remove untagged photos** (#5): optional `removeUntagged` per link, applied during the full sync.
+>   `"added"` (2.1.0) only removes photos this tool added itself, so photos you put into the album by hand always stay.
 > - IDs are validated up front with a clear message per link (likely cause of #9: a person ID with a missing character).
 > - `@immich/sdk` 3.3.5, page size 1000, adds/removes in chunks of 500, no overlapping runs.
 >
@@ -115,7 +116,7 @@ Album IDs:
         { "description": "Joe", "personId": "…", "albumId": "…" },
         // several people, photos with at least one of them, only since 2020, keep the album clean
         { "description": "Family", "personIds": ["…", "…"], "match": "any", "albumId": "…",
-          "takenAfter": "2020-01-01", "removeUntagged": true },
+          "takenAfter": "2020-01-01", "removeUntagged": "added" },
         // only photos showing both
         { "description": "Joe & Ann", "personIds": ["…", "…"], "match": "all", "albumId": "…" }
       ]
@@ -124,8 +125,12 @@ Album IDs:
 }
 ```
 
-`removeUntagged` removes every asset from the album that belongs to none of the links pointing at that album,
-**including photos you added by hand**. It only runs during a full sync in which all links of that album succeeded.
+`removeUntagged` cleans the album during a full sync in which all links of that album succeeded:
+
+- `"added"` (recommended): removes photos **this tool added** that no longer match (e.g. a wrongly tagged face was
+  fixed in Immich). Photos you added by hand are never touched. The tool remembers what it added in `store.json`
+  (`added:<key>:<albumId>`); photos added before 2.1.0 are not in that list.
+- `true`: removes **every** photo that matches none of the album's links, **including photos you added by hand**.
 
 ## Troubleshooting
 

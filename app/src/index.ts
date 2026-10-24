@@ -44,15 +44,17 @@ async function run (full: boolean) {
     init({ baseUrl: pta.config.immichServer + '/api', apiKey: user.apiKey })
 
     // Per album: the assets that should stay in it, and whether every link worked
-    const albums = new Map<string, { keep: Set<string>, ok: boolean, remove: boolean, description: string }>()
+    const albums = new Map<string, { keep: Set<string>, ok: boolean, remove: false | true | 'added', description: string }>()
 
     // Process each of the person-album linkages
     for (const link of user.personLinks as Link[]) {
       // Populate a truncated API key which will be used in the store.json key name
       link.apiKeyShort = user.apiKey.slice(0, 6)
-      const album = albums.get(link.albumId) || { keep: new Set<string>(), ok: true, remove: false, description: link.description || link.albumId }
+      const album = albums.get(link.albumId) || { keep: new Set<string>(), ok: true, remove: false as false | true | 'added', description: link.description || link.albumId }
       albums.set(link.albumId, album)
-      album.remove = album.remove || !!link.removeUntagged
+      // `true` (remove everything) wins over `added` if links of the same album disagree
+      if (link.removeUntagged === true) album.remove = true
+      else if (link.removeUntagged === 'added' && album.remove !== true) album.remove = 'added'
 
       const problem = pta.validateLink(link)
       if (problem) {
@@ -79,7 +81,7 @@ async function run (full: boolean) {
           continue
         }
         try {
-          await pta.removeUntagged(albumId, album.keep, album.description)
+          await pta.removeUntagged(user.apiKey.slice(0, 6), albumId, album.keep, album.remove, album.description)
         } catch (e: any) {
           console.log(` - removing from album ${albumId} failed: ${e?.data?.message || e?.message || e}`)
         }

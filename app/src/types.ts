@@ -32,9 +32,11 @@ export interface Link {
   takenBefore?: string;
   /**
    * During the full sync, remove assets from the album that no longer belong to
-   * any link pointing at this album (e.g. a face was unassigned). Off by default,
-   * because it also removes assets that were added to the album by hand.
+   * any link pointing at this album (e.g. a face was unassigned).
+   * - `"added"`: only assets this tool added itself; anything added by hand stays.
+   * - `true`: every non-matching asset, including ones added by hand.
+   * Off by default.
    */
-  removeUntagged?: boolean;
+  removeUntagged?: boolean | 'added';
   apiKeyShort: string;
 }
